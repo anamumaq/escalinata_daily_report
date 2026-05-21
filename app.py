@@ -20,8 +20,8 @@ if archivo_cargado is not None:
         ]
         numericos=['cantidad', 'precio_unitario', 'total']
 
-        df = pd.read_excel(
-            "Pedidos_test.xlsx", 
+        df= pd.read_excel(
+            archivo_cargado, 
             sheet_name="Reporte Pedidos detallado", 
             usecols="A:L",
             engine="calamine",
@@ -117,7 +117,7 @@ if archivo_cargado is not None:
             total_pendientes = df_filtrado[df_filtrado['estado'] == 'Pendiente']['codigo'].nunique()
             
             # Contamos eliminados si tienen fecha de eliminación o si el estado es 'Anulado'
-            total_eliminados = df_filtrado[(df_filtrado['fecha_eliminacion'].notna()) | (df_filtrado['estado'] == 'Anulado')]['codigo'].nunique()
+            total_eliminados = df_filtrado[(df_filtrado['fecha_eliminacion'].notna()) | (df_filtrado['estado'] == 'Eliminado')]['codigo'].nunique()
             
             # El cálculo de delivery busca los códigos únicos filtrados que originalmente contienen la palabra DELIVERY
             codigos_delivery_global = df[df['producto'].str.contains('DELIVERY', case=False, na=False)]['codigo'].unique()
@@ -169,10 +169,10 @@ if archivo_cargado is not None:
             
             # --- PESTAÑA 2: AUDITORÍA DE ELIMINACIONES ---
             with tab2:
-                st.subheader("⚠️ Pedidos Anulados")
+                st.subheader("⚠️ Pedidos Eliminados")
                 st.caption("Monitorea de cerca qué productos fueron borrados y contrástalo con pérdidas o fraudes simulados.")
                 
-                tabla_eliminacion = df_filtrado[df_filtrado['fecha_eliminacion'].notna() | (df_filtrado['estado'] == 'Anulado')].copy()
+                tabla_eliminacion = df_filtrado[df_filtrado['fecha_eliminacion'].notna() | (df_filtrado['estado'] == 'Eliminado')].copy()
                 tabla_eliminacion = tabla_eliminacion[['h_pedido', 'h_eliminacion', 'mesa', 'producto', 'total']]
                 
                 if not tabla_eliminacion.empty:
