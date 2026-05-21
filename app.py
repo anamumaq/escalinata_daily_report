@@ -185,7 +185,7 @@ if archivo_cargado is not None:
                 st.subheader("💰 Densidad de Dinero por Hora y Mesa")
                 
                 # Listas de control de orden (Asegúrate de definir orden_horas y orden_mesas previamente en tu script)
-                pivot_dinero = df[df['estado'] == 'Facturado'].pivot_table(
+                pivot_dinero = df_filtrado[df_filtrado['estado'] == 'Facturado'].pivot_table(
                     index='hora_entera', 
                     columns='mesa', 
                     values='total', 
@@ -250,7 +250,7 @@ if archivo_cargado is not None:
                 st.subheader("🔢 Densidad de Cantidad por Hora y Mesa")
                 
                 # Listas de control de orden (Asegúrate de definir orden_horas y orden_mesas previamente en tu script)
-                pivot_cantidad = df[df['estado'] == 'Facturado'].pivot_table(
+                pivot_cantidad = df_filtrado[df_filtrado['estado'] == 'Facturado'].pivot_table(
                     index='hora_entera', 
                     columns='mesa', 
                     values='cantidad', 
