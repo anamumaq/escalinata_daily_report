@@ -112,6 +112,8 @@ if archivo_cargado is not None:
             
             # 1. Cálculos de métricas basados en el DataFrame filtrado
             total_pedidos_unicos = df_filtrado['codigo'].nunique()
+
+            soles_facturados = df_filtrado[df_filtrado['estado'] == 'Facturado']['total'].sum()
             
             total_facturados = df_filtrado[df_filtrado['estado'] == 'Facturado']['codigo'].nunique()
             total_pendientes = df_filtrado[df_filtrado['estado'] == 'Pendiente']['codigo'].nunique()
@@ -124,17 +126,19 @@ if archivo_cargado is not None:
             total_deliveries = df_filtrado[df_filtrado['codigo'].isin(codigos_delivery_global)]['codigo'].nunique()
             
             # 2. Layout de Tarjetas en 5 columnas
-            col1, col2, col3, col4, col5 = st.columns(5)
+            col1, col2, col3, col4, col5, col6 = st.columns(6)
             
             with col1:
                 st.metric(label="🎟️ Total Pedidos", value=f"{total_pedidos_unicos}")
             with col2:
-                st.metric(label="✅ Total Facturados", value=f"{total_facturados}")
+                st.metric(label="💲 Soles Facturados", value=f"{soles_facturados}")
             with col3:
-                st.metric(label="⏳ Total Pendientes", value=f"{total_pendientes}")
+                st.metric(label="✅ Total Facturados", value=f"{total_facturados}")
             with col4:
-                st.metric(label="🚨 Total Eliminados", value=f"{total_eliminados}")
+                st.metric(label="⏳ Total Pendientes", value=f"{total_pendientes}")
             with col5:
+                st.metric(label="🚨 Total Eliminados", value=f"{total_eliminados}")
+            with col6:
                 st.metric(label="🛵 Total Delivery", value=f"{total_deliveries}")
             
             st.markdown("---")
@@ -143,31 +147,109 @@ if archivo_cargado is not None:
             # ==========================================
             #   PESTAÑAS DE TRABAJO (TABS)
             # ==========================================
-            tab1, tab2, tab3, tab4, tab5 = st.tabs(
-                ["🕵️ Control de Salón (Cámaras)", 
-                 "🚨 Auditoría de Eliminaciones", 
-                 "💰 Densidad de Dinero por Hora y Mesa",                 
-                 "🔥 Densidad de Pedidos por Hora y Mesa",
-                 "🗺️ Mapa de Calor (Pedidos)"])
+            tab1, tab2, tab3 = st.tabs(
+                ["🕵️ Gestion de Salon", 
+                 "🚨 Auditoría de Eliminaciones",
+                 "🗒️ Reporte para Stock"
+                 ])
             
             # --- PESTAÑA 1: TABLA DE CONTRASTE ---
             with tab1:
-                st.subheader("📋 Consumo Cronológico por Mesa")
-                st.caption("Usa esta tabla para contrastar los despachos visuales de tus cámaras con el sistema.")
-                
-                # Modificación: agregamos salto de línea nativo en Streamlit cambiando /n por <br> o espacio
-                tabla_contraste = (df_filtrado[df_filtrado['estado'] == 'Facturado']
-                    .groupby(['h_pedido', 'mesa', 'codigo'])
-                    .agg(
-                        Productos=('producto', lambda x: ', '.join(x.dropna())), # Cambiado a coma limpia para visualización tabular
-                        Total_soles=('total', 'sum')
+                st.subheader("🕵️ Gestión de Salón (Monitoreo por Tarjetas)")
+                st.caption("Contrasta visualmente cada ticket con tus cámaras usando estas tarjetas independientes.")
+
+                # Filtramos para trabajar solo con los pedidos facturados dentro del df_filtrado
+                df_salon = df_filtrado[df_filtrado['estado'] == 'Facturado']
+
+                if not df_salon.empty:
+                    # 1. Agrupamos por pedido para obtener las cabeceras y totales
+                    pedidos_resumen = (df_salon.groupby(['codigo', 'h_pedido', 'mesa'])
+                        .agg(
+                            Total_Soles=('total', 'sum'),
+                            Total_Productos=('cantidad', 'sum')
+                        )
+                        .reset_index()
                     )
-                    .reset_index()
-                    .sort_values(by=['h_pedido', 'mesa'])
-                )
-                st.dataframe(tabla_contraste, use_container_width=True, hide_index=True)
+
+                    # 2. COMPONENTE DE ORDENAMIENTO INTERNO (Solo ordena, no filtra)
+                    st.markdown("##### 🔀 Ordenar tarjetas por:")
+                    opcion_orden = st.radio(
+                        "Selecciona el criterio de ordenamiento:",
+                        options=["Hora (Más recientes primero)", "Número de Mesa", "Monto (Mayor a menor)"],
+                        horizontal=True,
+                        label_visibility="collapsed" # Oculta el título del radio para que se vea más limpio
+                    )
+
+                    # 3. Aplicar la lógica de orden según la opción seleccionada
+                    if opcion_orden == "Hora":
+                        pedidos_resumen = pedidos_resumen.sort_values(by='h_pedido', ascending=False)
+                    elif opcion_orden == "Mesa":
+                        # Usamos el orden_mesas establecido previamente para que no ordene de forma alfabética simple (ej. P1_M10 antes que P1_M2)
+                        pedidos_resumen['mesa'] = pd.Categorical(pedidos_resumen['mesa'], categories=orden_mesas, ordered=True)
+                        pedidos_resumen = pedidos_resumen.sort_values(by='mesa')
+                    elif opcion_orden == "Monto":
+                        pedidos_resumen = pedidos_resumen.sort_values(by='Total_Soles', ascending=False)
+
+                    # 4. Configuración de la cuadrícula: 3 tarjetas por fila
+                    tarjetas_por_fila = 3
+                    
+                    # Iteramos sobre los pedidos ya ordenados
+                    for i in range(0, len(pedidos_resumen), tarjetas_por_fila):
+                        bloque_pedidos = pedidos_resumen.iloc[i : i + tarjetas_por_fila]
+                        cols_fila = st.columns(tarjetas_por_fila)
+                        
+                        for idx, (_, row) in enumerate(bloque_pedidos.iterrows()):
+                            with cols_fila[idx]:
+                                # Contenedor con borde (Efecto visual de Tarjeta)
+                                with st.container(border=True):
+                                    
+                                    # --- FILA SUPERIOR DE LA TARJETA ---
+                                    head_col1, head_col2, head_col3 = st.columns([1.2, 1.6, 1.2])
+                                    
+                                    with head_col1:
+                                        st.markdown(f"<p style='margin:0; font-size:14px; color:gray;'>🕒 {row['h_pedido']}</p>", unsafe_allow_html=True)
+                                    
+                                    with head_col2:
+                                        st.markdown(f"<p style='text-align:center; margin:0; font-weight:bold; color:#FF4B4B;'>#{row['codigo']}</p>", unsafe_allow_html=True)
+                                    
+                                    with head_col3:
+                                        st.markdown(f"<p style='text-align:right; margin:0; font-weight:bold; color:#1E88E5;'> {row['mesa']}</p>", unsafe_allow_html=True)
+                                    
+                                    st.markdown("<hr style='margin:8px 0; border:0; border-top:1px solid #ddd;'>", unsafe_allow_html=True)
+                                    
+                                    # --- CUERPO DE LA TARJETA ---
+                                    body_col1, body_col2 = st.columns(2)
+                                    with body_col1:
+                                        st.metric(label="💰 Total Soles", value=f"S/. {row['Total_Soles']:.1f}")
+                                    with body_col2:
+                                        st.metric(label="📦 Cant. Total", value=f"{int(row['Total_Productos'])} und")
+                                    
+                                    # --- MENÚ EXPANDIBLE (Detalle) ---
+                                                                   
+                                    productos_del_pedido = df_salon[df_salon['codigo'] == row['codigo']][['producto', 'cantidad', 'estado']]
+                                    
+                                    with st.expander("📋 Ver lista de productos"):
+                                        for _, prod in productos_del_pedido.iterrows():
+                                            # Determinar el color según el estado del producto
+                                            estado_prod = str(prod['estado']).strip().lower()
+                                            
+                                            if estado_prod in ['anulado', 'eliminado']:
+                                                color_fuente = "#FF4B4B"  # Rojo Streamlit
+                                            elif estado_prod == 'pendiente':
+                                                color_fuente = "#FFAA00"  # Amarillo/Naranja visible
+                                            else:
+                                                color_fuente = "inherit"  # Color normal del tema (blanco o negro según modo oscuro/claro)
+                                            
+                                            # Construimos la línea con HTML para aplicar el color
+                                            texto_producto = f"• **{int(prod['cantidad'])}x** {prod['producto']}"
+                                            st.markdown(
+                                                f"<span style='color: {color_fuente};'>{texto_producto}</span>", 
+                                                unsafe_allow_html=True
+                                            )
+                else:
+                    st.info("No se registran pedidos para armar las tarjetas con los filtros actuales.")            
             
-            # --- PESTAÑA 2: AUDITORÍA DE ELIMINACIONES ---
+            # --- PESTAÑA 3: AUDITORÍA DE ELIMINACIONES ---
             with tab2:
                 st.subheader("⚠️ Pedidos Eliminados")
                 st.caption("Monitorea de cerca qué productos fueron borrados y contrástalo con pérdidas o fraudes simulados.")
@@ -179,204 +261,40 @@ if archivo_cargado is not None:
                     st.dataframe(tabla_eliminacion.style.highlight_null(color="#ffcccc"), use_container_width=True, hide_index=True)
                 else:
                     st.info("No se registran órdenes eliminadas o anuladas bajo los filtros seleccionados.")
-            
-            # --- PESTAÑA 3: MAPA DE CALOR INTERACTIVO ---
+            #----------------------------
             with tab3:
-                st.subheader("💰 Densidad de Dinero por Hora y Mesa")
                 
-                # Listas de control de orden (Asegúrate de definir orden_horas y orden_mesas previamente en tu script)
-                pivot_dinero = df_filtrado[df_filtrado['estado'] == 'Facturado'].pivot_table(
-                    index='hora_entera', 
-                    columns='mesa', 
-                    values='total', 
-                    aggfunc='sum'
+                st.subheader("🗒️ Reporte para Stock")
+                st.caption("Usa este resumen de cantidades vendidas para realizar el cuadre e inventario con tu stock físico.")
+
+                # Agrupamos por Estado y Producto para sumar la cantidad total vendida
+                # Usamos el df_filtrado para que responda a los filtros de la barra lateral (por si quieres ver solo un mozo, una hora, etc.)
+                reporte_stock = (df_filtrado
+                    .groupby(['estado', 'producto'])['cantidad']
+                    .sum()
+                    .reset_index()
                 )
-                
-                # Ajuste de reindex dinámico según los filtros para evitar que crasheé Plotly
-                mesas_filtradas = [m for m in orden_mesas if m in pivot_dinero.columns]
-                horas_filtradas = [h for h in orden_horas if h in pivot_dinero.index]
-                
-                if not pivot_dinero.empty:
-                    pivot_dinero = pivot_dinero.reindex(index=orden_horas, columns=orden_mesas)
-                    etiquetas_horas = [f"{h}:00" for h in pivot_dinero.index]
 
-                    fig_dinero = px.imshow(
-                        pivot_dinero,
-                        labels=dict(x="Mesa", y="Hora", color="Total(S/.)"),
-                        x=pivot_dinero.columns,
-                        y=etiquetas_horas,
-                        text_auto=".1f",    
-                        aspect="auto",
-                        color_continuous_scale="Greens",
-                        title="Dinero Acumulado (Hora vs Mesa)",
-                        width=700,         # Ancho amplio para que las mesas entren rectas
-                        height=600          # Alto suficiente para que no se oculte ninguna hora
-                    )
-                    fig_dinero.update_xaxes(
-                        side='bottom',                 # Pone las mesas en la parte de arriba
-                        tickangle=270,                # Fuerza a que las etiquetas estén completamente horizontales
-                        showgrid=False,             # Elimina las líneas de guía del fondo
-                        zeroline=False,             # Elimina la línea base cero
-                        tickmode='array',           # Fuerza a Plotly a pintar TODAS las mesas de la lista
-                        tickvals=list(range(len(orden_mesas))),
-                        ticktext=orden_mesas
-                    )
+                # Renombramos las columnas para que se vea limpio y profesional en la interfaz
+                reporte_stock.columns = ['Estado', 'Producto', 'Cantidad']
 
-                    # 6. Configuración del Eje Y (Horas) - COMPLETO Y SIN LÍNEAS
-                    fig_dinero.update_yaxes(
-                        type='category',
-                        showgrid=False,             # Elimina las líneas de guía del fondo
-                        zeroline=False,             # Elimina la línea base cero
-                        tickmode='array',           # Fuerza a Plotly a pintar TODAS las horas de la lista
-                        tickvals=list(range(len(etiquetas_horas))),
-                        ticktext=etiquetas_horas
+                # Ordenamos el reporte para que los productos más vendidos salgan primero
+                reporte_stock = reporte_stock.sort_values(by=['Estado', 'Cantidad'], ascending=[True, False])
+
+                if not reporte_stock.empty:
+                    # Mostramos la tabla en Streamlit ocupando todo el ancho disponible
+                    st.dataframe(
+                        reporte_stock, 
+                        use_container_width=True, 
+                        hide_index=True # Oculta la columna de índices por defecto de pandas que no aporta valor visual
                     )
                     
-                    # Líneas divisorias inteligentes basadas en lo que queda disponible en el filtro
-                    if 12 in horas_filtradas:
-                        idx_pm = horas_filtradas.index(12) - 0.5
-                        fig_dinero.add_hline(y=idx_pm, line_dash="dash", line_color="gray", annotation_text="Inicio PM")
-                    if 0 in horas_filtradas:
-                        idx_mn = horas_filtradas.index(0) - 0.5
-                        fig_dinero.add_hline(y=idx_mn, line_dash="dash", line_color="gray", annotation_text="Madrugada")
-                    
-                    # Desplegar gráfico adaptativo en Streamlit
-                    st.plotly_chart(fig_dinero, use_container_width=True)
+                    # Un pequeño indicador del volumen total físico movido bajo los filtros actuales
+                    total_unidades = int(reporte_stock['Cantidad'].sum())
+                    st.info(f"📦 **Volumen Total Movido:** Se han registrado un total de **{total_unidades} unidades** de productos salientes en cocina/barra.")
                 else:
-                    st.warning("No hay datos suficientes para dibujar el mapa de calor con los filtros actuales.")
-
-            # --- PESTAÑA 4: MAPA DE CALOR INTERACTIVO ---
-            with tab4:
-                st.subheader("🔢 Densidad de Cantidad por Hora y Mesa")
-                
-                # Listas de control de orden (Asegúrate de definir orden_horas y orden_mesas previamente en tu script)
-                pivot_cantidad = df_filtrado[df_filtrado['estado'] == 'Facturado'].pivot_table(
-                    index='hora_entera', 
-                    columns='mesa', 
-                    values='cantidad', 
-                    aggfunc='sum', 
-                    fill_value=''
-                )
-                
-                # Ajuste de reindex dinámico según los filtros para evitar que crasheé Plotly
-                mesas_filtradas = [m for m in orden_mesas if m in pivot_cantidad.columns]
-                horas_filtradas = [h for h in orden_horas if h in pivot_cantidad.index]
-                
-                if not pivot_cantidad.empty:
-                    pivot_cantidad = pivot_cantidad.reindex(index=orden_horas, columns=orden_mesas)
-                    etiquetas_horas = [f"{h}:00" for h in pivot_cantidad.index]
-                    
-                    
-                    fig_cantidad = px.imshow(
-                        pivot_cantidad,
-                        labels=dict(x="Mesa", y="Hora", color="Cantidad"),
-                        x=pivot_cantidad.columns,
-                        y=etiquetas_horas,
-                        text_auto=".0f",    
-                        aspect="auto",
-                        color_continuous_scale="ylgn",
-                        title="Cantidad Acumulada (Hora vs Mesa)",
-                        width=700,         # Ancho amplio para que las mesas entren rectas
-                        height=600          # Alto suficiente para que no se oculte ninguna hora
-                    )
-
-                    fig_cantidad.update_xaxes(
-                        side='bottom',                 # Pone las mesas en la parte de arriba
-                        tickangle=270,                # Fuerza a que las etiquetas estén completamente horizontales
-                        showgrid=False,             # Elimina las líneas de guía del fondo
-                        zeroline=False,             # Elimina la línea base cero
-                        tickmode='array',           # Fuerza a Plotly a pintar TODAS las mesas de la lista
-                        tickvals=list(range(len(orden_mesas))),
-                        ticktext=orden_mesas
-                    )
-
-                    # 6. Configuración del Eje Y (Horas) - COMPLETO Y SIN LÍNEAS
-                    fig_cantidad.update_yaxes(
-                        type='category',
-                        showgrid=False,             # Elimina las líneas de guía del fondo
-                        zeroline=False,             # Elimina la línea base cero
-                        tickmode='array',           # Fuerza a Plotly a pintar TODAS las horas de la lista
-                        tickvals=list(range(len(etiquetas_horas))),
-                        ticktext=etiquetas_horas
-                    )
-                    
-                    # Líneas divisorias inteligentes basadas en lo que queda disponible en el filtro
-                    if 12 in horas_filtradas:
-                        idx_pm = horas_filtradas.index(12) - 0.5
-                        fig_cantidad.add_hline(y=idx_pm, line_dash="dash", line_color="gray", annotation_text="Inicio PM")
-                    if 0 in horas_filtradas:
-                        idx_mn = horas_filtradas.index(0) - 0.5
-                        fig_cantidad.add_hline(y=idx_mn, line_dash="dash", line_color="gray", annotation_text="Madrugada")
-                    
-                    # Desplegar gráfico adaptativo en Streamlit
-                    st.plotly_chart(fig_cantidad, use_container_width=True)
-                else:
-                    st.warning("No hay datos suficientes para dibujar el mapa de calor con los filtros actuales.")
-
-            # --- PESTAÑA 5: MAPA DE CALOR INTERACTIVO ---
-            with tab5:
-                st.subheader("🔥 Densidad de Pedidos por Hora y Mesa")
-                
-                # Listas de control de orden (Asegúrate de definir orden_horas y orden_mesas previamente en tu script)
-                pivot_pedidos = df_filtrado[df_filtrado['estado'] == 'Facturado'].pivot_table(
-                    index='hora_entera', 
-                    columns='mesa', 
-                    values='codigo', 
-                    aggfunc='nunique'
-                )
-                
-                # Ajuste de reindex dinámico según los filtros para evitar que crasheé Plotly
-                mesas_filtradas = [m for m in orden_mesas if m in pivot_pedidos.columns]
-                horas_filtradas = [h for h in orden_horas if h in pivot_pedidos.index]
-                
-                if not pivot_pedidos.empty:
-                    pivot_pedidos = pivot_pedidos.reindex(index=orden_horas, columns=orden_mesas)
-                    etiquetas_horas = [f"{h}:00" for h in pivot_pedidos.index]
-                    
-                    fig_pedidos = px.imshow(
-                        pivot_pedidos,
-                        labels=dict(x="Mesa", y="Hora", color="Total pedidos"),
-                        x=pivot_pedidos.columns,
-                        y=etiquetas_horas,
-                        text_auto=".0f",    
-                        aspect="auto",
-                        color_continuous_scale="Reds",
-                        title="Distribución de Carga de Trabajo (Pedidos Únicos)",
-                        width=700,         # Ancho amplio para que las mesas entren rectas
-                        height=600   
-                    )
-                    
-                    fig_pedidos.update_xaxes(
-                        side='top', # Cambiado a 'top' para mantener consistencia con el gráfico anterior de dinero
-                        tickangle=0,
-                        showgrid=False,
-                        zeroline=False
-                    )
-                    
-                    fig_pedidos.update_yaxes(
-                        type='category',
-                        showgrid=False,
-                        zeroline=False
-                    )
-                    
-                    # Líneas divisorias inteligentes basadas en lo que queda disponible en el filtro
-                    if 12 in horas_filtradas:
-                        idx_pm = horas_filtradas.index(12) - 0.5
-                        fig_pedidos.add_hline(y=idx_pm, line_dash="dash", line_color="gray", annotation_text="Inicio PM")
-                    if 0 in horas_filtradas:
-                        idx_mn = horas_filtradas.index(0) - 0.5
-                        fig_pedidos.add_hline(y=idx_mn, line_dash="dash", line_color="gray", annotation_text="Madrugada")
-                    
-                    # Desplegar gráfico adaptativo en Streamlit
-                    st.plotly_chart(fig_pedidos, use_container_width=True)
-                else:
-                    st.warning("No hay datos suficientes para dibujar el mapa de calor con los filtros actuales.")
-                                              
-            # --- SECCIÓN EXTRA: RATIOS DE ESTADO EN EL SIDEBAR O AL FINAL ---
-            #with st.sidebar.expander("📈 Ver Ratios de Estado (Muestra total)"):
-            #    ratios_estado = df['estado'].value_counts().reset_index()
-            #    ratios_estado.columns = ['Estado', 'Total']
-            #    st.dataframe(ratios_estado, hide_index=True)
+                    st.warning("No hay registros de productos vendidos bajo los filtros seleccionados actualmente.")
+            
         else:
             st.error("🚨 El archivo no coincide con la estructura de columnas requerida.")
             
