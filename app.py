@@ -50,9 +50,6 @@ if archivo_cargado is not None:
         if all(col in df.columns for col in COLUMNAS_REQUERIDAS):
             st.success("¡Archivo cargado y validado con éxito!")
             
-            # --- SECCIÓN DE VISTA PREVIA ---
-            with st.expander("👀 Ver vista previa de los datos"):
-                st.dataframe(df.head(3), use_container_width=True)
             # --------------------------------------------
             orden_horas = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1, 2, 3]
 
@@ -113,7 +110,8 @@ if archivo_cargado is not None:
             # 1. Cálculos de métricas basados en el DataFrame filtrado
             total_pedidos_unicos = df_filtrado['codigo'].nunique()
 
-            soles_facturados = df_filtrado[df_filtrado['estado'] == 'Facturado']['total'].sum()
+            soles_facturados = df_filtrado[df_filtrado['estado'] == 'Facturado']['total'].sum().round(1)
+            soles_pendientes = df_filtrado[df_filtrado['estado'] == 'Pendiente']['total'].sum().round(1)
             
             total_facturados = df_filtrado[df_filtrado['estado'] == 'Facturado']['codigo'].nunique()
             total_pendientes = df_filtrado[df_filtrado['estado'] == 'Pendiente']['codigo'].nunique()
@@ -126,20 +124,32 @@ if archivo_cargado is not None:
             total_deliveries = df_filtrado[df_filtrado['codigo'].isin(codigos_delivery_global)]['codigo'].nunique()
             
             # 2. Layout de Tarjetas en 5 columnas
-            col1, col2, col3, col4, col5, col6 = st.columns(6)
+            st.markdown("### 💰 Control de Caja")
+            primaria_col1, primaria_col2 = st.columns(2)
             
-            with col1:
-                st.metric(label="🎟️ Total Pedidos", value=f"{total_pedidos_unicos}")
-            with col2:
-                st.metric(label="💲 Soles Facturados", value=f"{soles_facturados}")
-            with col3:
-                st.metric(label="✅ Total Facturados", value=f"{total_facturados}")
-            with col4:
-                st.metric(label="⏳ Total Pendientes", value=f"{total_pendientes}")
-            with col5:
-                st.metric(label="🚨 Total Eliminados", value=f"{total_eliminados}")
-            with col6:
-                st.metric(label="🛵 Total Delivery", value=f"{total_deliveries}")
+            with primaria_col1:
+                st.metric(label="💵 SOLES FACTURADOS (Caja Real)", value=f"S/. {soles_facturados}")
+            with primaria_col2:
+                st.metric(label="⏳ SOLES PENDIENTES (Por Cobrar)", value=f"S/. {soles_pendientes}")
+                
+            st.markdown("<br>", unsafe_allow_html=True) # Pequeño espacio de respiro visual
+            
+            
+            # --- 3. FILA INFERIOR: MÉTRICAS SECUNDARIAS (CANTIDAD DE TICKETS) ---
+            # Dividimos en 5 columnas compactas para el conteo operativo
+            st.markdown("##### 🎟️ Movimiento de Tickets")
+            secundaria_col1, secundaria_col2, secundaria_col3, secundaria_col4, secundaria_col5 = st.columns(5)
+            
+            with secundaria_col1:
+                st.metric(label="Total Pedidos", value=f"{total_pedidos_unicos}")
+            with secundaria_col2:
+                st.metric(label="Tickets Facturados", value=f"{total_facturados}")
+            with secundaria_col3:
+                st.metric(label="Tickets Pendientes", value=f"{total_pendientes}")
+            with secundaria_col4:
+                st.metric(label="Tickets Eliminados", value=f"{total_eliminados}")
+            with secundaria_col5:
+                st.metric(label="Tickets Delivery", value=f"{total_deliveries}")
             
             st.markdown("---")
             
@@ -147,16 +157,17 @@ if archivo_cargado is not None:
             # ==========================================
             #   PESTAÑAS DE TRABAJO (TABS)
             # ==========================================
-            tab1, tab2, tab3 = st.tabs(
-                ["🕵️ Gestion de Salon", 
-                 "🚨 Auditoría de Eliminaciones",
-                 "🗒️ Reporte para Stock"
-                 ])
-            
+            #tab1, tab2, tab3 = st.tabs(
+            #    ["🕵️ Gestion de Salon", 
+            #     "🚨 Auditoría de Eliminaciones",
+            #     "🗒️ Reporte para Stock"
+            #     ])
+            st.markdown("### 🔍 Módulos de Inspección")
+
             # --- PESTAÑA 1: TABLA DE CONTRASTE ---
-            with tab1:
+            with st.expander("🕵️ Abrir Gestión de Salón solo Facturado", expanded=False):
                 st.subheader("🕵️ Gestión de Salón (Monitoreo por Tarjetas)")
-                st.caption("Contrasta visualmente cada ticket con tus cámaras usando estas tarjetas independientes.")
+                st.caption("Contrasta visualmente cada ticket con tus cámaras usando estas tarjetas.")
 
                 # Filtramos para trabajar solo con los pedidos facturados dentro del df_filtrado
                 df_salon = df_filtrado[df_filtrado['estado'] == 'Facturado']
@@ -174,8 +185,8 @@ if archivo_cargado is not None:
                     # 2. COMPONENTE DE ORDENAMIENTO INTERNO (Solo ordena, no filtra)
                     st.markdown("##### 🔀 Ordenar tarjetas por:")
                     opcion_orden = st.radio(
-                        "Selecciona el criterio de ordenamiento:",
-                        options=["Hora (Más recientes primero)", "Número de Mesa", "Monto (Mayor a menor)"],
+                        "Selecciona el criterio de ordenamiento (Ascendente):",
+                        options=["Hora", "Mesa", "Monto"],
                         horizontal=True,
                         label_visibility="collapsed" # Oculta el título del radio para que se vea más limpio
                     )
@@ -250,8 +261,8 @@ if archivo_cargado is not None:
                     st.info("No se registran pedidos para armar las tarjetas con los filtros actuales.")            
             
             # --- PESTAÑA 3: AUDITORÍA DE ELIMINACIONES ---
-            with tab2:
-                st.subheader("⚠️ Pedidos Eliminados")
+            with st.expander("🚨 Abrir Auditoría de Eliminaciones", expanded=False):
+                st.subheader("⚠️ Pedidos Anulados o Eliminados")
                 st.caption("Monitorea de cerca qué productos fueron borrados y contrástalo con pérdidas o fraudes simulados.")
                 
                 tabla_eliminacion = df_filtrado[df_filtrado['fecha_eliminacion'].notna() | (df_filtrado['estado'] == 'Eliminado')].copy()
@@ -261,40 +272,39 @@ if archivo_cargado is not None:
                     st.dataframe(tabla_eliminacion.style.highlight_null(color="#ffcccc"), use_container_width=True, hide_index=True)
                 else:
                     st.info("No se registran órdenes eliminadas o anuladas bajo los filtros seleccionados.")
-            #----------------------------
-            with tab3:
+                        
+            # --- PESTAÑA 4: PENDIENTES DE FACTURAR ---
+            with st.expander("🚨 Abrir Mesas pendientes de Facturación", expanded=False):
+                st.subheader("⚠️ Pedidos Pendientes")
+                st.caption("Monitorea productos pendientes de facturación.")
                 
+                tabla_pendientes = df_filtrado[df_filtrado['fecha_eliminacion'].notna() | (df_filtrado['estado'] == 'Pendiente')].copy()
+                tabla_pendientes = tabla_pendientes[['h_pedido', 'h_eliminacion', 'mesa', 'producto', 'total']]
+                
+                if not tabla_pendientes.empty:
+                    st.dataframe(tabla_pendientes.style.highlight_null(color="#ffcccc"), use_container_width=True, hide_index=True)
+                else:
+                    st.info("No se registran órdenes pendientes bajo los filtros seleccionados.")
+                    
+            #-------PESTAÑA 4: TABLA PRODUCTOS ---
+            with st.expander("🗒️ Abrir Reporte para Stock", expanded=False):
                 st.subheader("🗒️ Reporte para Stock")
                 st.caption("Usa este resumen de cantidades vendidas para realizar el cuadre e inventario con tu stock físico.")
 
-                # Agrupamos por Estado y Producto para sumar la cantidad total vendida
-                # Usamos el df_filtrado para que responda a los filtros de la barra lateral (por si quieres ver solo un mozo, una hora, etc.)
                 reporte_stock = (df_filtrado
                     .groupby(['estado', 'producto'])['cantidad']
                     .sum()
                     .reset_index()
                 )
-
-                # Renombramos las columnas para que se vea limpio y profesional en la interfaz
-                reporte_stock.columns = ['Estado', 'Producto', 'Cantidad']
-
-                # Ordenamos el reporte para que los productos más vendidos salgan primero
-                reporte_stock = reporte_stock.sort_values(by=['Estado', 'Cantidad'], ascending=[True, False])
+                reporte_stock.columns = ['Estado', 'Producto', 'Cantidad Vendida (Unidades)']
+                reporte_stock = reporte_stock.sort_values(by=['Estado', 'Cantidad Vendida (Unidades)'], ascending=[True, False])
 
                 if not reporte_stock.empty:
-                    # Mostramos la tabla en Streamlit ocupando todo el ancho disponible
-                    st.dataframe(
-                        reporte_stock, 
-                        use_container_width=True, 
-                        hide_index=True # Oculta la columna de índices por defecto de pandas que no aporta valor visual
-                    )
-                    
-                    # Un pequeño indicador del volumen total físico movido bajo los filtros actuales
-                    total_unidades = int(reporte_stock['Cantidad'].sum())
-                    st.info(f"📦 **Volumen Total Movido:** Se han registrado un total de **{total_unidades} unidades** de productos salientes en cocina/barra.")
+                    st.dataframe(reporte_stock, use_container_width=True, hide_index=True)
+                    total_unidades = int(reporte_stock['Cantidad Vendida (Unidades)'].sum())
+                    st.info(f"📦 **Volumen Total Movido:** Se han registrado un total de **{total_unidades} unidades** de productos.")
                 else:
                     st.warning("No hay registros de productos vendidos bajo los filtros seleccionados actualmente.")
-            
         else:
             st.error("🚨 El archivo no coincide con la estructura de columnas requerida.")
             
