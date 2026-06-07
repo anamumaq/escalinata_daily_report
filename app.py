@@ -2,15 +2,15 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# Configuración de la página
-st.set_page_config(page_title="Dashboard Automatizado", layout="wide")
+#--------------------------------------------------------------------------
+st.set_page_config(page_title="Escalinata Cafeteria - Daily Report", layout="wide")
 
-st.title("📊 Dashboard de Reportes Automatizados")
-st.markdown("Descarga tu archivo Excel de la web, súbelo aquí y el análisis se generará al instante.")
+st.title("📊 Reporte Diario de Pedidos")
+st.markdown("Descargar el archivo Excel desde SENDA, súbelo aquí y el análisis se generará al instante.")
 
-# 1. Componente para subir el archivo
+# --- Componente para subir el archivo ---
 archivo_cargado = st.file_uploader("Elige el archivo Excel (.xlsx)", type=["xlsx"])
-
+        # Limpieza y estandarización de nombres de columnas, manejo de fechas y conversión de tipos numéricos
 if archivo_cargado is not None:
     try:
         nuevos_nombres = [
@@ -39,18 +39,15 @@ if archivo_cargado is not None:
             subset=['estado']
         ).assign(**{col: df[col].apply(pd.to_numeric, errors='coerce') for col in numericos})
         )
-
-        
-        # --- CONFIGURACIÓN DE COLUMNAS ---
-        # Define aquí las columnas que SIEMPRE deben venir en tu reporte
-        # Ejemplo: COLUMNAS_REQUERIDAS = ['Fecha', 'Categoría', 'Ventas', 'Cliente']
+  
+# --- CONFIGURACIÓN DE COLUMNAS ---
         COLUMNAS_REQUERIDAS = list(df.columns) # Por ahora toma las que vienen
         
         # Validar que la estructura sea la correcta
         if all(col in df.columns for col in COLUMNAS_REQUERIDAS):
             st.success("¡Archivo cargado y validado con éxito!")
             
-            # --------------------------------------------
+            #  orden necesario para que no ordene alfabéticamente
             orden_horas = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1, 2, 3]
 
             orden_mesas = [
@@ -59,11 +56,9 @@ if archivo_cargado is not None:
                 'P2_MESA1','P2_MESA2','P2_MESA3','P2_MESA4','P2_MESA5',
                 'SIN MESA'
             ]
-            # -----------------------------------------------------------
-
-            # ==========================================
-            #   BARRA LATERAL: FILTROS DINÁMICOS
-            # ==========================================
+# ==========================================
+#   BARRA LATERAL: FILTROS DINÁMICOS
+# ==========================================
             st.sidebar.header("🛠️ Filtros del Tablero")
             # 1. Filtro de Estado
             estados_disponibles = sorted(df['estado'].dropna().unique())
@@ -101,10 +96,9 @@ if archivo_cargado is not None:
                 (df['mesa'].isin(mesas_seleccionadas))
             ].copy()
             
-            
-            # ==========================================
-            #   SECCIÓN DE KPIs / MÉTRICAS PRINCIPALES
-            # ==========================================
+# ==========================================
+#   SECCIÓN DE KPIs / MÉTRICAS PRINCIPALES
+# ==========================================
             st.markdown("## 📊 Indicadores Clave del Día")
             
             # 1. Cálculos de métricas basados en el DataFrame filtrado
@@ -152,11 +146,10 @@ if archivo_cargado is not None:
                 st.metric(label="Tickets Delivery", value=f"{total_deliveries}")
             
             st.markdown("---")
-            
-            
-            # ==========================================
-            #   PESTAÑAS DE TRABAJO (TABS)
-            # ==========================================
+                  
+# ==========================================
+#   PESTAÑAS DE TRABAJO (TABS)
+# ==========================================
             #tab1, tab2, tab3 = st.tabs(
             #    ["🕵️ Gestion de Salon", 
             #     "🚨 Auditoría de Eliminaciones",
@@ -167,7 +160,7 @@ if archivo_cargado is not None:
             # --- PESTAÑA 1: TABLA DE CONTRASTE ---
             with st.expander("🕵️ Abrir Gestión de Salón solo Facturado", expanded=False):
                 st.subheader("🕵️ Gestión de Salón (Monitoreo por Tarjetas)")
-                st.caption("Contrasta visualmente cada ticket con tus cámaras usando estas tarjetas.")
+                st.caption("Se ve lo facturado por mesa, hora y monto.")
 
                 # Filtramos para trabajar solo con los pedidos facturados dentro del df_filtrado
                 df_salon = df_filtrado[df_filtrado['estado'] == 'Facturado']
@@ -260,10 +253,10 @@ if archivo_cargado is not None:
                 else:
                     st.info("No se registran pedidos para armar las tarjetas con los filtros actuales.")            
             
-            # --- PESTAÑA 3: AUDITORÍA DE ELIMINACIONES ---
+            # --- PESTAÑA 2: AUDITORÍA DE ELIMINACIONES ---
             with st.expander("🚨 Abrir Auditoría de Eliminaciones", expanded=False):
                 st.subheader("⚠️ Pedidos Anulados o Eliminados")
-                st.caption("Monitorea de cerca qué productos fueron borrados y contrástalo con pérdidas o fraudes simulados.")
+                st.caption("Monitorea de cerca qué productos fueron borrados.")
                 
                 tabla_eliminacion = df_filtrado[df_filtrado['fecha_eliminacion'].notna() | (df_filtrado['estado'] == 'Eliminado')].copy()
                 tabla_eliminacion = tabla_eliminacion[['h_pedido', 'h_eliminacion', 'mesa', 'producto', 'total']]
@@ -273,10 +266,10 @@ if archivo_cargado is not None:
                 else:
                     st.info("No se registran órdenes eliminadas o anuladas bajo los filtros seleccionados.")
                         
-            # --- PESTAÑA 4: PENDIENTES DE FACTURAR ---
+            # --- PESTAÑA 3: PENDIENTES DE FACTURAR ---
             with st.expander("🚨 Abrir Mesas pendientes de Facturación", expanded=False):
                 st.subheader("⚠️ Pedidos Pendientes")
-                st.caption("Monitorea productos pendientes de facturación.")
+                st.caption("Monitorea pedidos realizados pendientes de facturación.")
                 
                 tabla_pendientes = df_filtrado[df_filtrado['fecha_eliminacion'].notna() | (df_filtrado['estado'] == 'Pendiente')].copy()
                 tabla_pendientes = tabla_pendientes[['h_pedido', 'h_eliminacion', 'mesa', 'producto', 'total']]
@@ -289,7 +282,7 @@ if archivo_cargado is not None:
             #-------PESTAÑA 4: TABLA PRODUCTOS ---
             with st.expander("🗒️ Abrir Reporte para Stock", expanded=False):
                 st.subheader("🗒️ Reporte para Stock")
-                st.caption("Usa este resumen de cantidades vendidas para realizar el cuadre e inventario con tu stock físico.")
+                st.caption("Resumen de cantidades vendidas por producto.")
 
                 reporte_stock = (df_filtrado
                     .groupby(['estado', 'producto'])['cantidad']
