@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import matplotlib.pyplot as plt
+import io
 
 #--------------------------------------------------------------------------
 st.set_page_config(page_title="Escalinata Cafeteria - Daily Report", layout="wide")
@@ -279,7 +281,7 @@ if archivo_cargado is not None:
                 else:
                     st.info("No se registran órdenes pendientes bajo los filtros seleccionados.")
                     
-            #-------PESTAÑA 4: TABLA PRODUCTOS ---
+            # -------PESTAÑA 4: TABLA PRODUCTOS ---
             with st.expander("🗒️ Abrir Reporte para Stock", expanded=False):
                 st.subheader("🗒️ Reporte para Stock")
                 st.caption("Resumen de cantidades vendidas por producto.")
@@ -289,18 +291,61 @@ if archivo_cargado is not None:
                     .sum()
                     .reset_index()
                 )
-                reporte_stock.columns = ['Estado', 'Producto', 'Cantidad Vendida (Unidades)']
-                reporte_stock = reporte_stock.sort_values(by=['Estado', 'Cantidad Vendida (Unidades)'], ascending=[True, False])
+                reporte_stock.columns = ['Estado', 'Producto', 'Q']
+                reporte_stock = reporte_stock.sort_values(by=['Estado', 'Q'], ascending=[True, False])
 
                 if not reporte_stock.empty:
+                    # Mostramos la tabla normal en la app
                     st.dataframe(reporte_stock, use_container_width=True, hide_index=True)
-                    total_unidades = int(reporte_stock['Cantidad Vendida (Unidades)'].sum())
+                    
+                    total_unidades = int(reporte_stock['Q'].sum())
                     st.info(f"📦 **Volumen Total Movido:** Se han registrado un total de **{total_unidades} unidades** de productos.")
+                    
+                    # --- LÓGICA PARA GENERAR LA IMAGEN EN EL SERVIDOR ---x
+                    try:
+                        # 1. Crear la figura de Matplotlib simulando la tabla
+                        fig, ax = plt.subplots(figsize=(6, len(reporte_stock) * 0.4 + 1)) # Ajuste dinámico de altura
+                        ax.axis('off')
+                        ax.axis('tight')
+                        
+                        # 2. Dibujar la tabla
+                        tabla_img = ax.table(
+                            cellText=reporte_stock.values, 
+                            colLabels=reporte_stock.columns, 
+                            cellLoc='center', 
+                            loc='center'
+                        )
+                        
+                        # Estilizar la tabla (Corrección del error de fuente)
+                        tabla_img.auto_set_font_size(False)
+                        tabla_img.set_fontsize(10) # <- Método correcto en Matplotlib
+                        tabla_img.scale(1.5, 1.5)  # Ancho y alto de las celdas
+                        
+                        # Colorear los encabezados
+                        for (row, col), cell in tabla_img.get_celld().items():
+                            if row == 0:
+                                cell.set_text_props(weight='bold', color='white')
+                                cell.set_facecolor('#4CAF50') # Color verde corporativo
+                        
+                        # 3. Guardar la imagen en un buffer de memoria (bytes)
+                        buf = io.BytesIO()
+                        plt.savefig(buf, format="png", bbox_inches='tight', dpi=200)
+                        buf.seek(0)
+                        plt.close(fig) # Cerrar la figura para liberar memoria
+                        
+                        # 4. BOTÓN NATIVO DE STREAMLIT
+                        st.download_button(
+                            label="📸 Descargar Tabla como Imagen (PNG)",
+                            data=buf,
+                            file_name="reporte_stock.png",
+                            mime="image/png",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error(f"No se pudo generar la imagen para descarga: {e}")
+                        
                 else:
-                    st.warning("No hay registros de productos vendidos bajo los filtros seleccionados actualmente.")
-        else:
-            st.error("🚨 El archivo no coincide con la estructura de columnas requerida.")
-            
+                    st.warning("No hay registros de productos vendidos bajo los filtros seleccionados actualmente.")            
     except Exception as e:
         st.error(f"Error al procesar el archivo: {e}")
 else:
